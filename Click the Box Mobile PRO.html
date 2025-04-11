@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Click the Box Mobile PRO</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364);
+      overflow: hidden;
+      touch-action: manipulation;
+      color: #00ffcc;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background-image: radial-gradient(white 1px, transparent 1px);
+      background-size: 4px 4px;
+      opacity: 0.05;
+      z-index: 0;
+    }
+
+    #gameCanvas {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    .box {
+      position: absolute;
+      width: 14vw;
+      height: 14vw;
+      min-width: 60px;
+      min-height: 60px;
+      background: linear-gradient(45deg, #00ffcc, #0077ff);
+      border-radius: 10px;
+      box-shadow: 0 0 15px #00ffcc;
+      cursor: pointer;
+    }
+
+    #scoreBoard, #shop {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 4vw;
+      text-align: center;
+      width: 90vw;
+      z-index: 2;
+    }
+
+    #scoreBoard { top: 5px; }
+    #shop { bottom: 5px; }
+
+    button {
+      background: #00ffcc;
+      color: black;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 4vw;
+    }
+
+    button:disabled {
+      background: grey;
+      cursor: not-allowed;
+    }
+
+    #inputCodeContainer {
+      position: absolute;
+      left: 50%;
+      top: 20%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.6);
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 4vw;
+      color: white;
+      display: none;
+      text-align: center;
+      z-index: 3;
+    }
+
+    #inputCodeContainer input {
+      font-size: 4vw;
+      padding: 5px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body onclick="requestFullscreen()">
+  <div id="gameCanvas">
+    <div id="scoreBoard">
+      <div style="font-size: 3.5vw;" id="datetime">00.00.0000 00:00:00</div>
+      Wynik: <span id="score">0</span> |
+      Życia: <span id="lives">3</span><br>
+      EXP: <span id="exp">0</span> |
+      Lv: <span id="level">1</span> |
+      Monety: <span id="coins">0</span>
+    </div>
+    <div id="shop">
+      <button onclick="buyLife()">+1 życie (10 monet)</button>
+      <button onclick="loadProgress()">Wczytaj postęp</button>
+      <button onclick="togglePause()" id="pauseBtn">Pauza</button>
+      <button onclick="copySaveCode()" id="copyBtn">Skopiuj kod zapisu</button>
+    </div>
+
+    <div id="inputCodeContainer">
+      <h3>Wpisz kod zapisu:</h3>
+      <input type="text" id="saveCodeInput" placeholder="Kod zapisu">
+      <button onclick="processSaveCode()">Wczytaj</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const scoreSpan = document.getElementById('score');
+    const livesSpan = document.getElementById('lives');
+    const expSpan = document.getElementById('exp');
+    const levelSpan = document.getElementById('level');
+    const coinsSpan = document.getElementById('coins');
+    const datetimeSpan = document.getElementById('datetime');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const inputCodeContainer = document.getElementById('inputCodeContainer');
+    const saveCodeInput = document.getElementById('saveCodeInput');
+
+    let score = 0, lives = 3, exp = 0, level = 1, coins = 0, box;
+    let audioCtx, paused = false, gameInterval;
+
+    // Try loading progress from localStorage
+    function loadProgress() {
+      inputCodeContainer.style.display = 'block'; // show the input code box
+    }
+
+    function processSaveCode() {
+      const code = saveCodeInput.value;
+      if (!code || code.length !== 18 || isNaN(code)) {
+        alert("Kod jest niepoprawny!");
+        return;
+      }
+
+      try {
+        const s = parseInt(code.substr(0, 3));
+        const l = parseInt(code.substr(3, 3));
+        const e = parseInt(code.substr(6, 3));
+        const lv = parseInt(code.substr(9, 3));
+        const c = parseInt(code.substr(12, 3));
+        if ([s, l, e, lv, c].some(n => isNaN(n))) throw "err";
+
+        // Aktualizacja zmiennych bez resetowania gry
+        score = s;
+        lives = l;
+        exp = e;
+        level = lv;
+        coins = c;
+        updateUI();
+        inputCodeContainer.style.display = 'none'; // hide the input box after processing
+        alert("Postęp został wczytany!");
+      } catch (e) {
+        alert("Kod jest niepoprawny!");
+      }
+    }
+
+    function saveProgress() {
+      const raw = [score, lives, exp, level, coins].map(n => n.toString().padStart(3, '0')).join('');
+      const code = raw + Math.floor(100 + Math.random() * 899); // losowe 3 cyfry
+      alert("Twój kod zapisu:\n" + code);
+      return code;
+    }
+
+    function updateUI() {
+      scoreSpan.textContent = score;
+      livesSpan.textContent = lives;
+      expSpan.textContent = exp;
+      levelSpan.textContent = level;
+      coinsSpan.textContent = coins;
+    }
+
+    function buyLife() {
+      if (coins >= 10) {
+        coins -= 10;
+        lives++;
+        updateUI();
+      }
+    }
+
+    function requestFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen) el.msRequestFullscreen();
+    }
+
+    function playSound(frequency = 700, duration = 100) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = frequency;
+        osc.type = "square";
+        gain.gain.value = 0.1;
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration / 1000);
+      } catch (e) {
+        console.warn("Dźwięk nie zadziałał:", e);
+      }
+    }
+
+    function spawnBox() {
+      if (paused) return;
+
+      if (box) {
+        lives--;
+        updateUI();
+        checkGameOver();
+        box.remove();
+      }
+
+      box = document.createElement('div');
+      box.className = 'box';
+      const x = Math.random() * (window.innerWidth - 70);
+      const y = Math.random() * (window.innerHeight - 180) + 60;
+      box.style.left = `${x}px`;
+      box.style.top = `${y}px`;
+
+      box.onclick = (e) => {
+        e.stopPropagation();
+        score++;
+        coins++;
+        exp++;
+        if (exp % 10 === 0) level++;
+        updateUI();
+        playSound(900, 100);
+        box.remove();
+        box = null;
+      };
+
+      canvas.appendChild(box);
+    }
+
+    function checkGameOver() {
+      if (lives <= 0) {
+        playSound(100, 400);
+        setTimeout(() => {
+          alert("Koniec gry! Twój wynik: " + score);
+          location.reload();
+        }, 500);
+      }
+    }
+
+    function togglePause() {
+      paused = !paused;
+      pauseBtn.textContent = paused ? "Wznów" : "Pauza";
+    }
+
+    function updateTime() {
+      const now = new Date();
+      const date = now.toLocaleDateString('pl-PL');
+      const time = now.toLocaleTimeString('pl-PL');
+      datetimeSpan.textContent = `${date} ${time}`;
+    }
+
+    function copySaveCode() {
+      const code = saveProgress(); // generujemy kod zapisu
+      const textArea = document.createElement('textarea');
+      textArea.value = code; // wstawiamy kod do tymczasowego textarea
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy'); // kopiujemy tekst do schowka
+      document.body.removeChild(textArea);
+      alert('Kod zapisu został skopiowany do schowka!');
+    }
+
+    gameInterval = setInterval(spawnBox, 1000);
+    setInterval(updateTime, 1000);
+    updateUI();
+  </script>
+</body>
+</html>
